@@ -1,0 +1,146 @@
+AWS Infrastructure Documentation
+1. High-Level Architectural Overview
+This infrastructure sets up a scalable, highly available web application environment on AWS using:
+
+A VPC with public and private subnets across two Availability Zones (AZs)
+
+Auto Scaling Group for app server management
+
+A bastion (jump) server for secure access to private instances
+
+A Load Balancer for external access and traffic distribution
+
+Health checks and basic static web app hosting
+
+2. Key Components and Their Purposes
+Component	Purpose
+VPC	Provides a logically isolated network
+Public Subnets	Host internet-facing resources (e.g., bastion host, load balancer)
+Private Subnets	Host internal application servers
+Internet Gateway	Enables outbound internet access for public subnets
+NAT Gateways	Enable private subnet instances to access the internet securely
+Route Tables	Manage traffic flow between subnets and the internet
+Launch Template	Standardizes EC2 configuration for Auto Scaling Group
+Auto Scaling Group	Automatically manages app server instances based on demand
+Bastion Host	Provides SSH access to private instances
+Load Balancer (ALB)	Distributes incoming traffic to healthy app servers in private subnets
+Target Group	Group of EC2 instances the Load Balancer routes traffic to
+Static HTML App	A basic web application served via Python HTTP server
+
+3. Infrastructure Breakdown
+VPC & Networking
+VPC: 1
+
+Availability Zones: 2 (e.g., AZ-A and AZ-B)
+
+Subnets: 4 total
+
+2 Public (1 in each AZ)
+
+2 Private (1 in each AZ)
+
+Route Tables:
+
+1 Public Route Table (routes 0.0.0.0/0 to IGW)
+
+2 Private Route Tables (one for each AZ, route 0.0.0.0/0 to NAT Gateway)
+
+Internet Gateway: 1
+
+NAT Gateways: 2 (1 per AZ, in public subnets)
+
+Auto Scaling & EC2
+Launch Template:
+
+Uses a pre-configured AMI
+
+Sets instance type, key pair, and networking details
+
+Auto Scaling Group:
+
+Spread across 2 private subnets (one in each AZ)
+
+No Load Balancer attached initially
+
+Defines minimum, maximum, and desired capacity
+
+Bastion/Jump Server
+Deployed in Public Subnet
+
+Auto-assign public IP enabled
+
+Used to SSH into private app servers
+
+Key pairs copied to this instance for internal SSH access
+
+Application Deployment
+App Servers:
+
+Run simple HTML app using Python’s built-in web server (python3 -m http.server 8000)
+
+HTML Content:
+
+Hosted via index.html in app server home directory
+
+Load Balancer Setup
+Type: Internet-facing ALB
+
+Listener Port: 80
+
+Target Group:
+
+  Protocol: HTTP
+
+  Port: 8000
+
+  Targets: EC2 instances in private subnets
+
+Security Group:
+
+Allows inbound HTTP (port 80)
+
+Health Checks:
+
+Automatically route traffic only to healthy instances
+
+4. Data Flow Between Services
+[Internet User]
+      |
+      v
+[Load Balancer (Public Subnet)]
+      |
+      v
+[Target Group] ---> [Health Checks]
+      |
+      v
+[App Servers (Private Subnet)]
+      |
+      v
+[Outbound access via NAT Gateway -> Internet (for updates etc.)]
+
+For administrative access:
+
+[Admin Machine]
+      |
+      v
+[Jump Server (Public Subnet)]
+      |
+      v
+[SSH into App Servers (Private Subnet)]
+5. Security Considerations
+Measure	Details
+Subnets Segmentation	Public and private subnets isolate internal workloads
+Security Groups	Restrict access: LB allows HTTP; Bastion allows SSH only from specific IPs
+NAT Gateway Usage	Ensures private instances access internet without being directly exposed
+Key Management	SSH keys are securely transferred and stored on Bastion only
+Minimal Public Exposure	Only Bastion and Load Balancer are public-facing
+No Hardcoded Credentials	AMIs or EC2s use IAM roles where needed
+
+6. Common Failure Points and Mitigations
+Failure Point	Mitigation Strategy
+Single NAT Gateway	Use 1 NAT Gateway per AZ to prevent AZ-level dependency
+Health Check Failures	Ensure app servers respond properly on port 8000 and index.html exists
+Incorrect Subnet Selection	Always select private subnets for Auto Scaling Group
+Key Pair Loss	Back up keys securely or use EC2 Connect if applicable
+Load Balancer Misconfig	Verify correct Target Group, instance ports, and health check paths
+Security Group Misconfiguration	Validate ingress/egress rules for each component
